@@ -28,11 +28,15 @@ class Column:
 		for i in range(self.num_players):
 			self.player_scores.append(0)
 
-	def increment(self, player_ref):
-		self.player_scores[player_ref] = min(self.player_scores[player_ref]+1, self.spaces)
-		if self.player_scores[player_ref] >= self.spaces:
+	def advance(self, player_ref, steps):
+		if self.completed:
+			return False
+		previous = self.player_scores[player_ref]
+		self.player_scores[player_ref] = min(self.player_scores[player_ref] + steps, self.spaces)
+		if previous < self.spaces and self.player_scores[player_ref] >= self.spaces:
 			self.completed = True
 			self.winner = player_ref
-
+			return True
+		return False
 
 
