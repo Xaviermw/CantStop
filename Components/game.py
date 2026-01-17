@@ -2,17 +2,19 @@ from .board_elements import Board, Column
 from .player import Player
 from .dice import DiceRoll
 import copy
+import time
 
 class CantStop:
 
 	round_logging = False
 	is_over = False
 
-	def __init__(self, num_players, round_logging, strategies=None):
+	def __init__(self, num_players, round_logging, strategies=None, roll_delay=2):
 		self.round_logging = round_logging
 		self.num_players = num_players
 		self.rounds_played = 0
 		self.strategies = strategies or ["balanced"] * num_players
+		self.roll_delay = roll_delay
 
 	def run_game(self):
 
@@ -26,7 +28,7 @@ class CantStop:
 		turn_increment = 0
 		while self.is_over == False:
 			player_ref = turn_increment % self.num_players
-			new_turn = Turn(players, board, player_ref, self.round_logging)
+			new_turn = Turn(players, board, player_ref, self.round_logging, roll_delay=self.roll_delay)
 			winner = new_turn.run_turn()
 			if winner is not None:
 				self.is_over = True
@@ -39,7 +41,7 @@ class Turn:
 
 	max_columns_in_turn = 3
 
-	def __init__(self, players, board, player_ref, round_logging):
+	def __init__(self, players, board, player_ref, round_logging, roll_delay=2):
 		self.players = players
 		self.board = board
 		self.turn_cols = []
@@ -47,8 +49,12 @@ class Turn:
 		self.turn_over = False
 		self.player_ref = player_ref
 		self.round_logging = round_logging
+		self.roll_delay = roll_delay
 
 	def run_turn(self):
+		if self.round_logging:
+			player = self.players[self.player_ref]
+			print(f"Player {player.player_ref} ({player.strategy}) turn start")
 		while (self.turn_over == False):
 			options = self.roll_sequence()
 			if not options:
@@ -64,8 +70,14 @@ class Turn:
 				if player.decide_stop(self.board, self.turn_progress, self.turn_cols):
 					self.bank_progress()
 					if player.is_winner:
+						if self.round_logging:
+							print("Board state after turn:")
+							print(self.board.format_state())
 						return player.player_ref
 					self.turn_over = True
+		if self.round_logging:
+			print("Board state after turn:")
+			print(self.board.format_state())
 		return None
 
 	def update_turn(self, selection):
@@ -91,6 +103,8 @@ class Turn:
 
 
 	def roll_sequence(self):
+		if self.roll_delay:
+			time.sleep(self.roll_delay)
 		dice_roll = DiceRoll()
 		if self.round_logging:
 			print(dice_roll.dice)

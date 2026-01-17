@@ -44,7 +44,7 @@ def test_balanced_player_stops_on_column_finish():
 def test_turn_filter_combo_respects_max_columns():
 	board = Board(num_players=2)
 	players = [Player(num_players=2, player_ref=0), Player(num_players=2, player_ref=1)]
-	turn = Turn(players, board, player_ref=0, round_logging=False)
+	turn = Turn(players, board, player_ref=0, round_logging=False, roll_delay=0)
 	turn.turn_cols = [3, 4, 5]
 
 	assert turn.filter_combo([6, 7]) == []
