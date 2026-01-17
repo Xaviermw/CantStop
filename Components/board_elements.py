@@ -13,6 +13,14 @@ class Board:
 		for i in range(len(self.column_values)):
 			self.columns.append(Column(self.column_values[i], self.column_spaces[i], self.num_players))
 
+	def format_state(self):
+		lines = []
+		for column in self.columns:
+			status = "completed" if column.completed else "open"
+			scores = ", ".join(str(score) for score in column.player_scores)
+			lines.append(f"{column.value}: [{scores}] ({status})")
+		return "\n".join(lines)
+
 class Column:
 
 	def __init__(self, value, spaces, num_players):
@@ -28,11 +36,14 @@ class Column:
 		for i in range(self.num_players):
 			self.player_scores.append(0)
 
-	def increment(self, player_ref):
-		self.player_scores[player_ref] = min(self.player_scores[player_ref]+1, self.spaces)
-		if self.player_scores[player_ref] >= self.spaces:
+	def advance(self, player_ref, steps):
+		if self.completed:
+			return False
+		previous = self.player_scores[player_ref]
+		self.player_scores[player_ref] = min(self.player_scores[player_ref] + steps, self.spaces)
+		if previous < self.spaces and self.player_scores[player_ref] >= self.spaces:
 			self.completed = True
 			self.winner = player_ref
-
-
+			return True
+		return False
 
