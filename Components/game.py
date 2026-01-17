@@ -8,10 +8,11 @@ class CantStop:
 	round_logging = False
 	is_over = False
 
-	def __init__(self, num_players, round_logging):
+	def __init__(self, num_players, round_logging, strategies=None):
 		self.round_logging = round_logging
 		self.num_players = num_players
 		self.rounds_played = 0
+		self.strategies = strategies or ["balanced"] * num_players
 
 	def run_game(self):
 
@@ -19,52 +20,60 @@ class CantStop:
 		board = Board(self.num_players)
 		players = []
 		for i in range(self.num_players):
-			players.append(Player(self.num_players, i))
+			strategy = self.strategies[i] if i < len(self.strategies) else "balanced"
+			players.append(Player(self.num_players, i, strategy=strategy))
 
 		turn_increment = 0
 		while self.is_over == False:
 			player_ref = turn_increment % self.num_players
-			new_turn = Turn(players, copy.deepcopy(board), player_ref)
-			turn_over = False
-			new_turn.run_turn()
-			# while turn_over == False:
-				
-
-
+			new_turn = Turn(players, board, player_ref, self.round_logging)
+			winner = new_turn.run_turn()
+			if winner is not None:
+				self.is_over = True
+				break
 			turn_increment += 1
+			self.rounds_played += 1
+		return players, board
 
 class Turn:
 
 	max_columns_in_turn = 3
 
-	def __init__(self, players, board, player_ref):
+	def __init__(self, players, board, player_ref, round_logging):
 		self.players = players
 		self.board = board
 		self.turn_cols = []
+		self.turn_progress = {}
 		self.turn_over = False
 		self.player_ref = player_ref
+		self.round_logging = round_logging
 
 	def run_turn(self):
 		while (self.turn_over == False):
 			options = self.roll_sequence()
 			if not options:
-				print("No Valid Choice - Progress Lost")
+				if self.round_logging:
+					print("No Valid Choice - Progress Lost")
 				self.turn_over = True
 			else:
-				choice = self.select_combo(len(options))
-				print(options[choice])
-				self.update_turn(options[choice])
+				player = self.players[self.player_ref]
+				selection = player.choose_option(options, self.board, self.turn_progress)
+				if self.round_logging:
+					print(selection)
+				self.update_turn(selection)
+				if player.decide_stop(self.board, self.turn_progress, self.turn_cols):
+					self.bank_progress()
+					if player.is_winner:
+						return player.player_ref
+					self.turn_over = True
+		return None
 
 	def update_turn(self, selection):
-		if isinstance(selection, int):
-			if selection not in self.turn_cols:
-				self.turn_cols.append(selection)
-			self.board.columns[selection-2].increment(self.player_ref)
-		else: 
-			for column in selection:
-				if column not in self.turn_cols:
-					self.turn_cols.append(column)
-				self.board.columns[column-2].increment(self.player_ref)
+		columns = selection if isinstance(selection, (list, tuple)) else [selection]
+		for column in columns:
+			if column not in self.turn_cols:
+				self.turn_cols.append(column)
+			self.turn_progress[column] = self.turn_progress.get(column, 0) + 1
 
 
 	def select_combo(self, num_options):
@@ -83,51 +92,49 @@ class Turn:
 
 	def roll_sequence(self):
 		dice_roll = DiceRoll()
-		print(dice_roll.dice)
-		option_one = self.filter_combo(dice_roll.combinations[0])
-		option_two = self.filter_combo(dice_roll.combinations[1])
-		option_three = self.filter_combo(dice_roll.combinations[2])
-		all_options = option_one + option_two + option_three
-		print(all_options)
+		if self.round_logging:
+			print(dice_roll.dice)
+		all_options = []
+		for combo in dice_roll.combinations:
+			all_options.extend(self.filter_combo(combo))
+		if self.round_logging:
+			print(all_options)
 		return all_options
 
 	def filter_combo(self, combination):
-		return_combo = []
-		first_element = combination[0]
-		second_element = combination[1]
-		first_completed = self.board.columns[first_element-2].completed
-		second_completed = self.board.columns[second_element-2].completed
-		first_in_turn_cols = (first_element in self.turn_cols)
-		second_in_turn_cols = (second_element in self.turn_cols)
-		cols_this_turn = len(self.turn_cols)
+		options = []
+		first_element, second_element = combination
+		if first_element == second_element:
+			if self._column_available(first_element):
+				options.append(first_element)
+			return options
 
-		if (first_completed and second_completed):
-			pass
-		elif cols_this_turn == 3:
-			first_valid = (not first_completed and first_in_turn_cols)
-			second_valid = (not second_completed and second_in_turn_cols)
-			if (first_valid):
-				if (second_valid):
-					return_combo.append([first_element, second_element])
-				return_combo.append(first_element)
-			elif (second_valid):
-				return_combo.append(second_element)
-		elif (cols_this_turn == 2):
-			if (first_completed):
-				return_combo.append(second_element)
-			elif (second_completed):
-				return_combo.append(first_element)
-			elif (not first_in_turn_cols and not second_in_turn_cols):
-				return_combo.append(first_element)
-				return_combo.append(second_element)
-			else:
-				return_combo.append([first_element, second_element])
-		else:
-			if (first_completed):
-				return_combo.append(second_element)
-			elif (second_completed):
-				return_combo.append(first_element)
-			else:
-				return_combo.append([first_element, second_element])
-		return return_combo
+		first_available = self._column_available(first_element)
+		second_available = self._column_available(second_element)
+		if not first_available and not second_available:
+			return options
 
+		active = set(self.turn_cols)
+		new_columns = {c for c in (first_element, second_element) if c not in active}
+		if first_available and second_available and (len(active) + len(new_columns) <= self.max_columns_in_turn):
+			options.append([first_element, second_element])
+			return options
+
+		if first_available and (first_element in active or len(active) < self.max_columns_in_turn):
+			options.append(first_element)
+		if second_available and (second_element in active or len(active) < self.max_columns_in_turn):
+			options.append(second_element)
+		return options
+
+	def _column_available(self, column_value):
+		column = self.board.columns[column_value-2]
+		if column.completed:
+			return False
+		return True
+
+	def bank_progress(self):
+		player = self.players[self.player_ref]
+		for column_value, delta in self.turn_progress.items():
+			completed = self.board.columns[column_value-2].advance(self.player_ref, delta)
+			if completed:
+				player.register_column_win(column_value)
